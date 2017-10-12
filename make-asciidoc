@@ -195,6 +195,7 @@ EOT
     fi
     echo "include::${with_template}[]" >> "$tmpl"
 fi
+set -o pipefail
 log=$($ECHO asciidoctor-pdf \
     -r asciidoctor-diagram ${ENV:+-a env=$ENV}@ \
         -a pdf-stylesdir=$HOME/.config/asciidoctor-pdf/themes@ \
@@ -202,12 +203,13 @@ log=$($ECHO asciidoctor-pdf \
         -a version=${version}@ ${with_template:+ -q} \
         ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${style_dir:+-a style_dir="$style_dir"} -r hyphenation \
         -b pdf "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
+r=$?
 ((DEBUG)) && {
     echo $log
     echo "(aborting due to DEBUG mode)"
     exit 0
 }
-r=$?
 ((r)) && [[ -z "$log" ]] && r=0
+((r)) && echo "$log"
 \rm -f "$tmpl"
 exit $r
