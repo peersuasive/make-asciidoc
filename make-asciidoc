@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DEBUG=0
-
+ECHO=
 _help() {
     cat<<EOH
 Usage: ${0##*/} [OPTIONS] [--] <input.adoc>
@@ -145,6 +145,7 @@ else
 fi
 
 if ((DEBUG)); then
+ECHO="echo would run:"
 echo "ENV: $ENV"
 echo "common: $has_common"
 echo "lexicon: $has_lexicon"
@@ -154,9 +155,6 @@ echo "notes: $has_notes"
 echo "headers: $has_headers"
 echo "footers: $has_footers"
 echo "style: $has_style ($style_dir)"
-
-echo "(aborting due to DEBUG mode)"
-exit 0
 fi
 
 if [[ -n "$with_template" ]]; then
@@ -197,13 +195,18 @@ EOT
     fi
     echo "include::${with_template}[]" >> "$tmpl"
 fi
-log=$(asciidoctor-pdf \
+log=$($ECHO asciidoctor-pdf \
     -r asciidoctor-diagram ${ENV:+-a env=$ENV}@ \
         -a pdf-stylesdir=$HOME/.config/asciidoctor-pdf/themes@ \
         -a pdf-fontsdir=$HOME/.config/asciidoctor-pdf/fonts@ \
         -a version=${version}@ ${with_template:+ -q} \
         ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${style_dir:+-a style_dir="$style_dir"} -r hyphenation \
         -b pdf "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
+((DEBUG)) && {
+    echo $log
+    echo "(aborting due to DEBUG mode)"
+    exit 0
+}
 r=$?
 ((r)) && [[ -z "$log" ]] && r=0
 \rm -f "$tmpl"
