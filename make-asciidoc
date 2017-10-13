@@ -52,6 +52,7 @@ ARGS=()
 while (($#)); do
     if ((EOO)); then
         ARGS+=( "$1" )
+        shift
         continue
     fi
     case "$1" in
@@ -77,10 +78,9 @@ while (($#)); do
         --debug[0-9]*) DEBUG=${1#--debug};;
         *) ARGS+=( "$1" );;
     esac
-shift
-output_format=${output_format:-$default_format}
-
+    shift
 done
+output_format=${output_format:-$default_format}
 set -- "${ARGS[@]}"
 
 ((DEBUG>1)) && set -x
