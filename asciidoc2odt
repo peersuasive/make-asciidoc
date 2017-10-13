@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+! which pandoc >/dev/null && echo "Missing requirement: pandoc is required to convert this file." && exit 1
+! which make-asciidoc >/dev/null && echo "Missing requirement: make-asciidoc not found in PATH." && exit 1
+
+out_tmp=
+_clean() {
+    \rm -f "$out_tmp"
+}
+_error() {
+    _clean
+    [[ -n "$1" ]] && echo "$@" >&2
+    exit 1
+}
+_help() {
+cat <<EOH
+Usage: ${0##*/} -i <file> [-o <output_file>] [--] [make-asciidoc options]
+    -i|--input  input file
+    -o|--output output file
+    --          end of options
+EOH
+return 0
+}
+
+EOO=0
+OPTS=()
+while (($#)); do
+    ((EOO)) && OPTS+=( "$1" ) && shift && continue
+    case "$1" in
+        -h|--help) _help; exit 0;;
+        -i|--input) file="$2"; shift;;
+        -o|--output) out="$2"; shift;;
+        --) EOO=1;;
+        *) OPTS+=( "$1" );;
+    esac
+    shift
+done
+[[ -z "$file" || ! -r "$file" ]] && echo "Missing input document" && _help && exit 1
+[[ -z "$out" ]] && out=${file%.*}.odt
+out_tmp=$(mktemp -uq)
+#OPTS=( "${OPTS//%f/$file}" )
+
+make-asciidoc ${OPTS[@]} --format docbook --no-hyphenation -o "$out_tmp" "$file" || _error
+pandoc --from=docbook --to=odt "$out_tmp" > "$out" || _error
+_clean
