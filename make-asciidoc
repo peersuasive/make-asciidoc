@@ -21,7 +21,7 @@ Options:
     -H|--with-hyphenation   enable hyphenation (default: $(_c_v $with_hyphen))
     -Z|--no-hyphenation     disable hyphenation
     -o|--out <name>         output file
-    -E|--embed-images       embed images in html file
+    -E|--no-embedded-images don't embed images in html file
     --level                 try to guess title at which the excerpt is starting
     --headers <file>        specify a header file to include
     --footers <file>        specify a footer file to include
@@ -50,17 +50,21 @@ has_appendix=
 has_notes=
 has_style=
 output_file=
-embed_images=
+embed_images=1
 output_format=
 formats=()
 EOO=0
 ARGS=()
 OPTS=()
-sk() {
-    OPTS+=( "$1" )
-    shift
+add_format() {
+    [[ -z "$1" ]] && return 1
+    for ((i=0;i<${#formats[@]};++i)); do
+        [[ "${formats[$i]}" == $1 ]] && return 0; done
+    formats+=( "$1" )
 }
 while (($#)); do
+    s=0; ks=0
+    OPTS+=( "$1" )
     if ((EOO)); then
         ARGS+=( "$1" )
         shift
@@ -70,55 +74,53 @@ while (($#)); do
         --) EOO=1;;
         -h|--help) _help; exit 0;;
         --level) adjust_level=1;;
-        -e|--env) ENV=$2; shift;;
-        -t|--template) with_template="$2"; sk ;;
-        -s|--style) has_style="$2"; shift;;
-        -f|--format) s=1; formats+=( "$2" ); shift;;
+        -e|--env) ENV=$2; ks=1;;
+        -t|--template) with_template="$2"; ks=1;;
+        -s|--style) has_style="$2"; ks=1;;
+        -S|--css-style) has_css_style="${2%.css}.css"; ks=1;;
+        -f|--format) s=1; add_format "$2"; shift;;
         -H|--with-hyphenation) with_hyphen=1;;
         -Z|--no-hyphenation) unset with_hyphen;;
-        -o|--out) output_file="$2"; shift;;
-        -E|--embed-images) embed_images=1; sk;;
-        --headers) has_headers="$2"; sk;;
-        --footers) has_footers="$2"; sk;;
-        --common) has_common="$2"; sk;;
-        --biblio) has_biblio="$2"; sk;;
-        --lexicon) has_lexicon="$2"; sk;;
-        --appendix) has_appendix="$2"; sk;;
-        --notes) has_notes="$2"; sk;;
+        -o|--out) output_file="$2"; ks=1;;
+        -E|--embed-images) unset embed_images;;
+        --headers) has_headers="$2"; ks=1;;
+        --footers) has_footers="$2"; ks=1;;
+        --common) has_common="$2"; ks=1;;
+        --biblio) has_biblio="$2"; ks=1;;
+        --lexicon) has_lexicon="$2"; ks=1;;
+        --appendix) has_appendix="$2"; ks=1;;
+        --notes) has_notes="$2"; ks=1;;
         --debug) DEBUG=1;;
         --debug[0-9]*) DEBUG=${1#--debug};;
+        -B|--background) s=1; bg_format=1;;
         *) ARGS+=( "$1" );;
     esac
-    ((s)) || OPTS+=( "$1" )
+    ((s)) && unset OPTS[$((${#OPTS[@]}-1))]
+    ((ks)) && shift && OPTS+=( "$1" )
     shift
 done
-output_format="${formats[1]}"
+
+output_format="${formats[0]}"
 output_format=${output_format:-$default_format}
 set -- "${ARGS[@]}"
 
-echo "args: ${ARGS[@]}"
-
-compile() {
-    local log
-    log=$($ECHO ${cmd} \
-        -r asciidoctor-diagram ${ENV:+-a env=$ENV@} ${styles_dir:+-a pdf-stylesdir="${styles_dir}@"} ${fonts_dir:+-a pdf-fontsdir="${fonts_dir}@"} \
-        -a version=${version}@ ${with_template:+ -q} \
-        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${with_hyphen:+-r hyphenation} \
-        -b ${output_format:-$default_format} ${output_file:+-o $output_file} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
-    r=$?
-    return $r
-}
-
+## multiple formats at once
 mformat=${#formats[@]}
 if ((mformat>1)); then
-    echo "multiple formats detected !"
     set -- "${OPTS[@]}"
-    echo "ARGS: ${OPTS[@]}"
     declare -A res
     failed=0
     for ((i=0;i<mformat;++i)); do
-        fmt=${format[i]}
-        $0 -f $fmt "$@"
+        fmt=${formats[$i]}
+        if ((nbg_fmt)); then
+            $0 -f $fmt "$@" &
+        else
+            $0 -f $fmt "$@"
+            ((bg_format)) && {
+                bg_format=0
+                nbg_fmt=1
+            }
+        fi
         r=$?
         res[$fmt]=$r
         ((r)) && failed=1
@@ -165,7 +167,10 @@ find_file() {
     echo "${matches[@]}"
 }
 
+
+## set output format specific options
 if [[ "$output_format" == pdf ]]; then
+    config_dir=$HOME/.config/asciidoctor-pdf
     cmd=asciidoctor-pdf
     if [[ -d /config/asciidoctor-pdf ]]; then
         data_dir=/config/asciidoctor-pdf
@@ -179,6 +184,7 @@ if [[ "$output_format" == pdf ]]; then
         fonts_dir="$data_dir/fonts"
     fi
 elif [[ "$output_format" == doc || "$output_format" == docx ]]; then
+    config_dir=$HOME/.config/asciidoctor
     ARGS=( "$@" )
     eval "input_file=\$$#"
     ofile=${input_file%.*}.${output_format}
@@ -189,9 +195,10 @@ elif [[ "$output_format" == doc || "$output_format" == docx ]]; then
     ((r)) && { \rm -f "$html"; exit $r; }
     pandoc -s "$html" -f html+tex_math_dollars+smart -o "$output_file"
     r=$?
-    # \rm -f "$html"
+    \rm -f "$html"
     exit $r
 else ## html
+    config_dir=$HOME/.config/asciidoctor
     #ARGS=( "$@" )
     #eval "input_file=\$$#"
     #ofile=${input_file%.*}.html
@@ -246,6 +253,22 @@ else
     styles_dir=$(readlink -f `dirname "${has_style}"`)
     has_style=${has_style##*/}; has_style=${has_style%-}
 fi
+if [[ -z "$has_css_style" ]]; then
+    has_css_style=$(find_file -r ".*/.+[-]theme[.]css$")
+    if [[ -n "$has_css_style" ]]; then
+        has_css_style=${has_css_style##*/}
+        css_styles_dir=.
+    else
+        if [[ -d "$config_dir/stylesheets" ]]; then
+            css_styles_dir="$config_dir/stylesheets"
+        fi
+    fi
+else
+    [[ -f "${has_css_style}" ]] \
+        && css_styles_dir=$(readlink -f `dirname "${has_css_style}"`) \
+        || [[ -f "$config_dir/stylesheets/$has_css_style" ]] && css_styles_dir="$config_dir/stylesheets"
+    has_css_style=${has_css_style##*/};
+fi
 
 if [[ -d "$config_dir/fonts" ]]; then
     fonts_dir="$config_dir/fonts"
@@ -262,8 +285,15 @@ echo "notes: $has_notes"
 echo "headers: $has_headers"
 echo "footers: $has_footers"
 echo "style: $has_style ($styles_dir)"
+echo "css style: $has_css_style ($css_styles_dir)"
+echo "fonts dir: $fonts_dir"
+echo "version: $version"
+echo "has notes: $has_notes"
+echo "output format: $output_format"
+echo "output file: $output_file"
 fi
 
+## compile excerpt
 if [[ -n "$with_template" ]]; then
     #mktmp; set -- "-o" "${with_template%.*}.pdf" "$tmpl" 
     ofile=${with_template%.*}.pdf
@@ -295,6 +325,14 @@ endif::has_style[]
 ifndef::has_style[]
 :pdf-style: my
 endif::has_style[]
+ifdef::has_css_style[]
+:stylesdir: {css_styles_dir}
+:stylesheet: {has_css_style}
+endif::has_css_style[]
+ifndef::has_css_style[]
+:stylesheet: my-theme.css
+endif::has_css_style[]
+
 :pdf-page-size: A4
 :icons: font
 :icon-set: fa
@@ -331,11 +369,14 @@ EOT
     fi
     echo "include::${with_template}[]" >> "$tmpl"
 fi
+
+
+## compile
 log=$($ECHO ${cmd} \
     -r asciidoctor-diagram ${ENV:+-a env=$ENV@} ${styles_dir:+-a pdf-stylesdir="${styles_dir}@"} ${fonts_dir:+-a pdf-fontsdir="${fonts_dir}@"} \
         -a version=${version}@ ${with_template:+ -q} \
-        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${with_hyphen:+-r hyphenation} \
-        -b ${output_format:-$default_format} ${output_file:+-o $output_file} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
+        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} \
+        -b ${output_format} ${output_file:+-o $output_file} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
 r=$?
 ((DEBUG)) && {
     echo $log
@@ -344,6 +385,6 @@ r=$?
 }
 ((r)) && [[ -z "$log" ]] && r=0
 ((r)) && echo "$log"
-((clean_input)) && [[ -n "$input_file" ]] && \rm -f "$input_file"
+#((clean_input)) && [[ -n "$input_file" ]] && \rm -f "$input_file"
 \rm -f "$tmpl"
 exit $r
