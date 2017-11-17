@@ -22,6 +22,7 @@ Options:
     -Z|--no-hyphenation     disable hyphenation
     -o|--out <name>         output file
     -E|--no-embedded-images don't embed images in html file
+    -T|--force-toc          html only - force TOC
     --level                 try to guess title at which the excerpt is starting
     --headers <file>        specify a header file to include
     --footers <file>        specify a footer file to include
@@ -41,6 +42,7 @@ mktmp() {
     tmpl=.$(basename "$t")
 }
 
+post_treatment=()
 adjust_level=0
 with_template=
 has_biblio=
@@ -52,6 +54,7 @@ has_style=
 output_file=
 embed_images=1
 output_format=
+force_toc=
 formats=()
 EOO=0
 ARGS=()
@@ -75,7 +78,7 @@ while (($#)); do
         -h|--help) _help; exit 0;;
         --level) adjust_level=1;;
         -e|--env) ENV=$2; ks=1;;
-        -t|--template) with_template="$2"; ks=1;;
+        -t|--template) with_template=1;;
         -s|--style) has_style="$2"; ks=1;;
         -S|--css-style) has_css_style="${2%.css}.css"; ks=1;;
         -f|--format) s=1; add_format "$2"; shift;;
@@ -83,6 +86,7 @@ while (($#)); do
         -Z|--no-hyphenation) unset with_hyphen;;
         -o|--out) output_file="$2"; ks=1;;
         -E|--embed-images) unset embed_images;;
+        -T|--force-toc) force_toc=1;;
         --headers) has_headers="$2"; ks=1;;
         --footers) has_footers="$2"; ks=1;;
         --common) has_common="$2"; ks=1;;
@@ -167,52 +171,63 @@ find_file() {
     echo "${matches[@]}"
 }
 
-
 ## set output format specific options
-if [[ "$output_format" == pdf ]]; then
-    config_dir=$HOME/.config/asciidoctor-pdf
-    cmd=asciidoctor-pdf
-    if [[ -d /config/asciidoctor-pdf ]]; then
-        data_dir=/config/asciidoctor-pdf
-    else
-        data_dir=$HOME/.config/asciidoctor-pdf
-    fi
-    if [[ -d "$data_dir/themes" ]]; then
-        styles_dir="$data_dir/themes"
-    fi
-    if [[ -d "$data_dir/fonts" ]]; then
-        fonts_dir="$data_dir/fonts"
-    fi
-elif [[ "$output_format" == doc || "$output_format" == docx ]]; then
-    config_dir=$HOME/.config/asciidoctor
-    ARGS=( "$@" )
-    eval "input_file=\$$#"
-    ofile=${input_file%.*}.${output_format}
-    output_file=${output_file:-$ofile}
-    mktmp; html="$tmpl"
-    make-asciidoc -Z -f html -o "$html" ${ENV:+-a "env=${ENV}@"} "$input_file" 
-    r=$?
-    ((r)) && { \rm -f "$html"; exit $r; }
-    pandoc -s "$html" -f html+tex_math_dollars+smart -o "$output_file"
-    r=$?
-    \rm -f "$html"
-    exit $r
-else ## html
-    config_dir=$HOME/.config/asciidoctor
-    #ARGS=( "$@" )
-    #eval "input_file=\$$#"
-    #ofile=${input_file%.*}.html
-    #output_file=${output_file:-$ofile}
-    #mktmp; html="$tmpl"
-    ##cat "$input_file" | sed -e 's/^\ *<<<\ */---/g' > "$html"
-    #cat "$input_file" > "$html"
-    #input_file="$html"
+case $output_format in
+    pdf)
+        config_dir=$HOME/.config/asciidoctor-pdf
+        cmd=asciidoctor-pdf
+        [[ -d /config/asciidoctor-pdf ]] \
+            && data_dir=/config/asciidoctor-pdf \
+            || data_dir=$HOME/.config/asciidoctor-pdf
+        [[ -d "$data_dir/themes" ]] && styles_dir="$data_dir/themes"
+        [[ -d "$data_dir/fonts" ]] && fonts_dir="$data_dir/fonts"
+        ;;
+    doc)
+        output_format=docx
+        ;&
+    docx|odt)
+        config_dir=$HOME/.config/asciidoctor
+        ARGS=( "$@" )
+        eval "input_file=\$$#"
+        ofile=${input_file%.*}.${output_format}
+        output_file=${output_file:-$ofile}
+        mktmp; html="$tmpl"
+        make-asciidoc -Z -f html -o "$html" ${ENV:+-a "env=${ENV}@"} "$input_file" 
+        r=$?
+        ((r)) && { \rm -f "$html"; exit $r; }
+        pandoc -s "$html" -f html+tex_math_dollars+smart -t $output_format -o "$output_file"
+        r=$?
+        \rm -f "$html"
+        exit $r
+        ;;
+    html-notoc|html-jive)
+        output_format=html
+        no_toc=1
+        ;&
+    html)
+        ((force_toc)) && unset no_toc || no_toc=1
+        post_treatment+=( jive )
+        ;&
+    *)
+        config_dir=$HOME/.config/asciidoctor
+        cmd=asciidoctor
+        eval "input_file=\$$#"
+        ofile=${input_file%.*}.${output_format}
+        output_file=${output_file:-$ofile}
 
-    #ARGS[$((${#ARGS[@]}-1))]=""
-    #set -- "$html" "${ARGS[@]}"
-    #clean_input=1
-    cmd=asciidoctor
-fi
+        #ARGS=( "$@" )
+        #eval "input_file=\$$#"
+        #ofile=${input_file%.*}.html
+        #output_file=${output_file:-$ofile}
+        #mktmp; html="$tmpl"
+        ##cat "$input_file" | sed -e 's/^\ *<<<\ */---/g' > "$html"
+        #cat "$input_file" > "$html"
+        #input_file="$html"
+
+        #ARGS[$((${#ARGS[@]}-1))]=""
+        #set -- "$html" "${ARGS[@]}"
+        #clean_input=1
+esac
 
 ## look for commonly included files
 # common
@@ -295,8 +310,10 @@ fi
 
 ## compile excerpt
 if [[ -n "$with_template" ]]; then
-    #mktmp; set -- "-o" "${with_template%.*}.pdf" "$tmpl" 
-    ofile=${with_template%.*}.pdf
+    #mktmp; set -- "-o" "${with_template%.*}.pdf" "$tmpl"
+    #ofile=${with_template%.*}.pdf
+    eval "input_file=\$$#"
+    ofile=${input_file%.*}.${output_format}
     output_file=${output_file:-$ofile}
     mktmp; set -- "$tmpl"
     cat <<'EOT' >> "$tmpl"
@@ -312,8 +329,9 @@ ifndef::dev[]
 v0.9-RC1
 endif::dev[]
 endif::version[]
+ifndef::no_toc[]
 :toc:
-:toc-title: Sommaire
+endif::no_toc[]
 :doctype: article
 :experimental: true
 :source-highlighter: rouge
@@ -370,12 +388,11 @@ EOT
     echo "include::${with_template}[]" >> "$tmpl"
 fi
 
-
 ## compile
 log=$($ECHO ${cmd} \
     -r asciidoctor-diagram ${ENV:+-a env=$ENV@} ${styles_dir:+-a pdf-stylesdir="${styles_dir}@"} ${fonts_dir:+-a pdf-fontsdir="${fonts_dir}@"} \
         -a version=${version}@ ${with_template:+ -q} \
-        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} \
+        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} ${no_toc:+-a no_toc} \
         -b ${output_format} ${output_file:+-o $output_file} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
 r=$?
 ((DEBUG)) && {
@@ -385,6 +402,87 @@ r=$?
 }
 ((r)) && [[ -z "$log" ]] && r=0
 ((r)) && echo "$log"
+
+
+## post treatments
+# page break to horizontal rule
+pb2hr() {
+    sed -i 's,<div style="page-break-after: always;"></div>,<hr />,g' "$output_file"
+}
+
+footnotes() {
+    local oldIFS=$IFS
+    local IFS=$'\n'
+    local buffer=()
+    local local_buffer=(); 
+    local cnt=0; local pos_match=0; local match=0; local pdo=0; local pdc=0
+    for l in $(cat "$output_file"); do
+        if ((match)); then
+            dbg "within block"
+            wdo=$(echo "$l"|grep -o '<div'|wc -l)
+            wdc=$(echo "$l"|grep -o '</div'|wc -l)
+            ((cnt+=wdo)); ((cnt-=wdc))
+
+            dbg "cnt: $cnt, wdo: $wdo, wdc: $wdc"
+
+            ## end of block
+            if ((cnt<=0)); then
+                dbg "END OF BLOCK"
+                for b in ${local_buffer[@]}; do
+                    buffer+=( "$b" )
+                done
+                buffer+=( "$l" )
+                match=0
+                pos_match=0
+                local_buffer=()
+                pdc=0; pdo=0
+            else
+                dbg "found a par to modify"
+                pdo+=$(echo "$l"|grep -o '<p>'|wc -l)
+                l=$(echo "$l" | sed -e 's,<p>,<p style="font-size: x-small; font-family: monospace;">,g')
+                if ((pdo)); then
+                    pdc+=$(echo "$l"|grep -o '</div'|wc -l)
+                    ((pdo-pdc<=0)) && p_closed=1 && pdo=0 && pdc=0
+                fi
+                local_buffer+=( "$l" )
+            fi
+        elif [[ "$l" =~ \<div[^\>]+class=[\"\']([^\"\']*)\ *fn\ *[^\"\']* ]]; then
+            dbg "that's a possible match"
+            match=1
+            ((++cnt))
+            l=$(echo "$l" | sed -e "s,class=\([\"']\)\([^\"']*\)\ *fn\ *\([^\"']*\)\([\"']\)\(.*\)$)\",class=\1\2\3\4 style=\"\"\5,g" )
+            local_buffer+=( "$l" )
+        else
+            buffer+=( "$l" )
+        fi
+    done
+    for l in ${buffer[@]}; do
+        echo "$l"
+    done
+    IFS=$oldIFS
+}
+footnotes_cur() {
+    sed -i 's,class="\([^"]\+\)\ *fn\ *\([^"]*\)",class="\1 \2" style="font-size: x-small; font-family: monospace;",g' "$output_file"
+    return 0
+    # FIXME: only works for 1st note, should replace within whole <div></div> block though
+    sed -i '/class="\([^"]\+\)\ *fn\ *\([^"]*\)"/{ N; s,class="\([^"]\+\)\ *fn\ *\([^"]*\)"\([^<]\+\)<p>,class="\1 \2"\3<p style="font-size: x-small; font-family: monospace";>,g }' "$output_file"
+}
+nostyle() {
+    sed -i '/<style>/,/<\/style>/d' "$output_file"
+}
+## Post treatments... Shouldn't exist, really. Should be asciidoctor extensions.
+m=${#post_treatment[@]}
+for ((i=0;i<m;++i)); do
+    case $post_treatment in
+        jive)
+            nostyle
+            pb2hr
+            footnotes
+            ;;
+        pb2hr) pb2hr;;
+    esac
+done
+
 #((clean_input)) && [[ -n "$input_file" ]] && \rm -f "$input_file"
 \rm -f "$tmpl"
 exit $r
