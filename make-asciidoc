@@ -96,6 +96,7 @@ while (($#)); do
         --notes) has_notes="$2"; ks=1;;
         --debug) DEBUG=1;;
         --debug[0-9]*) DEBUG=${1#--debug};;
+        -BA|--background-all) s=1; bg_format=2;;
         -B|--background) s=1; bg_format=1;;
         *) ARGS+=( "$1" );;
     esac
@@ -114,17 +115,12 @@ if ((mformat>1)); then
     set -- "${OPTS[@]}"
     declare -A res
     failed=0
+    ((bg_format>1)) && nbg_fmt=1
     for ((i=0;i<mformat;++i)); do
         fmt=${formats[$i]}
-        if ((nbg_fmt)); then
-            $0 -f $fmt "$@" &
-        else
-            $0 -f $fmt "$@"
-            ((bg_format)) && {
-                bg_format=0
-                nbg_fmt=1
-            }
-        fi
+        !((nbg_fmt)) && { $0 -f $fmt "$@"; r=$?; }
+        ((bg_format)) && nbg_fmt=1; 
+        ((nbg_fmt)) && { $0 -f $fmt "$@" & r=0; }
         r=$?
         res[$fmt]=$r
         ((r)) && failed=1
@@ -202,11 +198,11 @@ case $output_format in
         ;;
     html-notoc|html-jive)
         output_format=html
+        post_treatment+=( jive )
         no_toc=1
         ;&
     html)
         ((force_toc)) && unset no_toc || no_toc=1
-        post_treatment+=( jive )
         ;&
     *)
         config_dir=$HOME/.config/asciidoctor
@@ -396,9 +392,16 @@ log=$($ECHO ${cmd} \
         -b ${output_format} ${output_file:+-o $output_file} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
 r=$?
 ((DEBUG)) && {
+    dbg() {
+        echo "DBG: $@" >&2
+    }
     echo $log
     echo "(aborting due to DEBUG mode)"
     exit 0
+} || {
+    dbg() {
+        :
+    }
 }
 ((r)) && [[ -z "$log" ]] && r=0
 ((r)) && echo "$log"
@@ -409,14 +412,18 @@ r=$?
 pb2hr() {
     sed -i 's,<div style="page-break-after: always;"></div>,<hr />,g' "$output_file"
 }
-
+no_int_links() {
+    sed -i 's,<a href="#[^"]\+">\([^<]\+\)<\/a>,\1,g' "$output_file"
+}
 footnotes() {
     local oldIFS=$IFS
+    mktmp; local out_buf="$tmpl"; unset tmpl
     local IFS=$'\n'
+    local buf=( $(cat "$output_file") )
     local buffer=()
-    local local_buffer=(); 
+    local local_buffer=()
     local cnt=0; local pos_match=0; local match=0; local pdo=0; local pdc=0
-    for l in $(cat "$output_file"); do
+    for l in ${buf[@]}; do
         if ((match)); then
             dbg "within block"
             wdo=$(echo "$l"|grep -o '<div'|wc -l)
@@ -429,9 +436,11 @@ footnotes() {
             if ((cnt<=0)); then
                 dbg "END OF BLOCK"
                 for b in ${local_buffer[@]}; do
-                    buffer+=( "$b" )
+                    #buffer+=( "$b" )
+                    echo "$b" >> "$out_buf"
                 done
-                buffer+=( "$l" )
+                #buffer+=( "$l" )
+                echo "$l" >> "$out_buf"
                 match=0
                 pos_match=0
                 local_buffer=()
@@ -439,10 +448,19 @@ footnotes() {
             else
                 dbg "found a par to modify"
                 pdo+=$(echo "$l"|grep -o '<p>'|wc -l)
-                l=$(echo "$l" | sed -e 's,<p>,<p style="font-size: x-small; font-family: monospace;">,g')
+                ## works but not ok with int-links anyway
+                _no_dis_fn=0
+                if ((_no_dis_fn)) && [[ "$l" =~ \<a\ id\= ]]; then
+                    l=$(echo "$l" | sed -e 's,<p><a id="\([^"]\+\)"></a>,<h6 id="\1" style="font-size: x-small!important; font-family: monospace!important;font-weight: normal!important;">,')
+                else
+                    l=$(echo "$l" | sed -e 's,<p>,<h6 style="font-size: x-small!important; font-family: monospace!important;font-weight: normal!important;color:rgba(0\,0\,0\,.6)!important;">,g')
+                fi
                 if ((pdo)); then
-                    pdc+=$(echo "$l"|grep -o '</div'|wc -l)
-                    ((pdo-pdc<=0)) && p_closed=1 && pdo=0 && pdc=0
+                    pdc+=$(echo "$l"|grep -o '</p'|wc -l)
+                    ((pdo-pdc<=0)) && {
+                        p_closed=1 && pdo=0 && pdc=0;
+                        l=$(echo "$l" | sed -e 's,</p>,</h6>,')
+                    }
                 fi
                 local_buffer+=( "$l" )
             fi
@@ -453,20 +471,18 @@ footnotes() {
             l=$(echo "$l" | sed -e "s,class=\([\"']\)\([^\"']*\)\ *fn\ *\([^\"']*\)\([\"']\)\(.*\)$)\",class=\1\2\3\4 style=\"\"\5,g" )
             local_buffer+=( "$l" )
         else
-            buffer+=( "$l" )
+            #buffer+=( "$l" )
+            echo "$l" >> "$out_buf"
         fi
     done
-    for l in ${buffer[@]}; do
-        echo "$l"
-    done
+    cat "$out_buf" > "$output_file"
+    \rm -f "$out_buf"
     IFS=$oldIFS
 }
-footnotes_cur() {
-    sed -i 's,class="\([^"]\+\)\ *fn\ *\([^"]*\)",class="\1 \2" style="font-size: x-small; font-family: monospace;",g' "$output_file"
-    return 0
-    # FIXME: only works for 1st note, should replace within whole <div></div> block though
-    sed -i '/class="\([^"]\+\)\ *fn\ *\([^"]*\)"/{ N; s,class="\([^"]\+\)\ *fn\ *\([^"]*\)"\([^<]\+\)<p>,class="\1 \2"\3<p style="font-size: x-small; font-family: monospace";>,g }' "$output_file"
-}
+#footnotes_cur() {
+#    ## sed failed attempt -- could have it working, though
+#    sed -i '/class="\([^"]\+\)\ *fn\ *\([^"]*\)"/{ N; s,class="\([^"]\+\)\ *fn\ *\([^"]*\)"\([^<]\+\)<p>,class="\1 \2"\3<p style="font-size: x-small; font-family: monospace";>,g }' "$output_file"
+#}
 nostyle() {
     sed -i '/<style>/,/<\/style>/d' "$output_file"
 }
@@ -478,6 +494,7 @@ for ((i=0;i<m;++i)); do
             nostyle
             pb2hr
             footnotes
+            no_int_links
             ;;
         pb2hr) pb2hr;;
     esac
