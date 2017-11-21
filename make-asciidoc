@@ -448,18 +448,21 @@ footnotes() {
             else
                 dbg "found a par to modify"
                 pdo+=$(echo "$l"|grep -o '<p>'|wc -l)
+
+                ## tag type
+                p="h6"
+                p="p"
                 ## works but not ok with int-links anyway
-                _no_dis_fn=0
-                if ((_no_dis_fn)) && [[ "$l" =~ \<a\ id\= ]]; then
-                    l=$(echo "$l" | sed -e 's,<p><a id="\([^"]\+\)"></a>,<h6 id="\1" style="font-size: x-small!important; font-family: monospace!important;font-weight: normal!important;">,')
+                if [[ "$l" =~ \<a\ id\= ]]; then
+                    l=$(echo "$l" | sed -e 's,<p><a id="\([^"]\+\)"></a>,<'${p}' id="\1" style="font-size: x-small!important; font-family: monospace!important;font-weight: normal!important;">,')
                 else
-                    l=$(echo "$l" | sed -e 's,<p>,<h6 style="font-size: x-small!important; font-family: monospace!important;font-weight: normal!important;color:rgba(0\,0\,0\,.6)!important;">,g')
+                    l=$(echo "$l" | sed -e 's,<p>,<'${p}' style="font-size: x-small!important; font-family: monospace!important;font-weight: normal!important;color:rgba(0\,0\,0\,.6)!important;">,g')
                 fi
                 if ((pdo)); then
                     pdc+=$(echo "$l"|grep -o '</p'|wc -l)
                     ((pdo-pdc<=0)) && {
                         p_closed=1 && pdo=0 && pdc=0;
-                        l=$(echo "$l" | sed -e 's,</p>,</h6>,')
+                        l=$(echo "$l" | sed -e 's,</p>,</'${p}'>,')
                     }
                 fi
                 local_buffer+=( "$l" )
