@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+[[ "$1" == -e || "$1" == --exit-with-error ]] && EWE=1 && shift
+F="$1"; shift
+P="$1"
+if ! type "$P" &>/dev/null; then
+    echo "Error: $P not found in PATH"
+    exit 1
+fi
+ARGS=()
+if [[ "$@" =~ %f ]]; then
+    ARGS="${@//%f/\"${F}\"}"
+else
+    ARGS="$@ \"$F\""
+fi
+
+while true; do
+    inotifywait -e modify "$F" &>/dev/null
+    echo "-- $(date) - compiling ${F}..."
+    eval ${ARGS} 1>/dev/null
+    r=$?
+    ((EWE)) && (($r)) && exit 1
+done

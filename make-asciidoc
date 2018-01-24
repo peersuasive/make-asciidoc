@@ -23,6 +23,7 @@ Options:
     -o|--out <name>         output file
     -E|--no-embedded-images don't embed images in html file
     -T|--force-toc          html only - force TOC
+    -V|--document-version   set specific version for the document
     --level                 try to guess title at which the excerpt is starting
     --headers <file>        specify a header file to include
     --footers <file>        specify a footer file to include
@@ -87,6 +88,7 @@ while (($#)); do
         -o|--out) output_file="$2"; ks=1;;
         -E|--embed-images) unset embed_images;;
         -T|--force-toc) force_toc=1;;
+        -V|--document-version) version="$2"; ks=1;;
         --headers) has_headers="$2"; ks=1;;
         --footers) has_footers="$2"; ks=1;;
         --common) has_common="$2"; ks=1;;
@@ -387,9 +389,9 @@ fi
 ## compile
 log=$($ECHO ${cmd} \
     -r asciidoctor-diagram ${ENV:+-a env=$ENV@} ${styles_dir:+-a pdf-stylesdir="${styles_dir}@"} ${fonts_dir:+-a pdf-fontsdir="${fonts_dir}@"} \
-        -a version=${version}@ ${with_template:+ -q} \
+        -a version="${version}"@ ${with_template:+ -q} \
         ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} ${no_toc:+-a no_toc} \
-        -b ${output_format} ${output_file:+-o $output_file} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
+        -b ${output_format} ${output_file:+-o "$output_file"} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already)')
 r=$?
 ((DEBUG)) && {
     dbg() {

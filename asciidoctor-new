@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+
+name=${1:-new_report}
+name=${name%.adoc}.adoc
+
+if [[ -f "$name" ]]; then
+    read -p"WARNING: '$name' already exists. Overwrite ? (y/N) " r
+    ! [[ "${r:-N}" =~ [Yy] ]] && echo "Aborting." && exit 0
+
+fi
+
+TITLE=${TITLE:-${name%.*}}
+
+AUTHOR=${AUTHOR:-Christophe (dbdl) Berbizier}
+EMAIL=${EMAIL:-cberbizier@peersuasive.com}
+HOME=${HOME:-$HOME}
+
+tmp=$(mktemp -u asciidoctor_new.XXXXXX)
+cat <<'EOT' > "$tmp"
+= %TITLE%
+%AUTHOR% <%EMAIL%>
+v0.0, {localdatetime}: draft
+:toc:
+:toc-title: Sommaire
+:doctype: article
+:experimental: true
+:source-highlighter: rouge
+:listing-caption: Listing
+:pdf-page-size: A4
+:pdf-stylesdir: %HOME%/.config/asciidoctor-pdf/themes
+:pdf-style: my
+:icons: font
+:icon-set: fa
+:sectnums:
+:sectnumlevels: 2
+:lang: fr
+// :icon-set: octicon
+
+:sectnums!:
+
+ifdef::dev[]
+:version: {revnumber}.{revremark}.{revdate}
+endif::dev[]
+
+[.test-right]
+[.xsmall.gray]#_``{version}``_#
+
+// common attributes //////////////////////
+ifdef::has_common[]
+include::{has_common}[]
+endif::has_common[]
+:fn: 0
+:lbl: lbl-
+
+== Contexte
+
+== Objectif
+
+== Livrables
+
+<<<
+
+// Lexicon
+ifdef::has_lexicon[]
+== Lexique
+include::{has_lexicon}[]
+
+<<<
+
+endif::has_lexicon[]
+
+// Appendix
+ifdef::has_appendix[]
+== Annexes
+include::{has_appendix}[]
+
+<<<
+
+endif::has_appendix[]
+
+// Biblio
+ifdef::has_biblio[]
+== Bibliographie
+include::{has_biblio}[]
+
+<<<
+
+endif::has_biblio[]
+
+// notes
+ifdef::dev[]
+ifdef::has_notes[]
+== à faire, notes
+
+include::{has_notes}[]
+
+endif::has_notes[]
+endif::dev[]
+
+EOT
+sed -i "s/%TITLE%/${TITLE}/g" "$tmp"
+sed -i "s,%HOME%,${HOME},g" "$tmp"
+sed -i "s/%AUTHOR%/${AUTHOR}/g" "$tmp"
+sed -i "s/%EMAIL%/${EMAIL}/g" "$tmp"
+
+\mv "$tmp" "$name"
+
+echo "'$name' created."

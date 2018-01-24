@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+oldIFS=$IFS
+
+
+files=()
+_files=()
+main=
+cmd=()
+excl=()
+EOA=0
+[[ "$@" =~ \ --\  ]] && hasEOA=1
+while (($#)); do
+    if ((EOA)); then 
+        #cmd+=( "$1" )
+        cmd+=( "$@" )
+        shift $(($#-1))
+    elif ((hasEOA)) && [[ -f "$1" ]];then 
+        _files+=( "$1" )
+    else
+        case "$1" in
+            -h|--help) echo "Usage: ${0##*/} <input...> [--] <cmd> [cmd arguments]"; exit 0;;
+            --) EOA=1;;
+            -m|--main)
+                ! [[ -f "$2" && -r "$2" ]] && echo "Can't open main file '$2'!" && exit 1
+                main="$2"; shift;;
+            -x|--exclude) excl+=( "$2" ); shift;;
+            -*) echo "Unknown option: $1"; exec "$0" --help; exit 1;;
+            *)
+                if [[ -f "$1" ]]; then _files+=( "$1" )
+                else cmd+=( "$1" ); fi
+        esac
+    fi
+    shift
+done
+IFS=$'\n'
+for f in ${_files[@]}; do
+    cont=0
+    for x in ${excl[@]}; do
+        [[ "$f" == "$x" ]] && cont=1 && break
+    done
+    ((cont)) && continue
+    files+=( "$f" )
+done
+IFS=$oldIFS
+# try to guess command if not explicitely provided...
+P=${cmd[0]}
+if !((EOA)); then
+    if ! type "$P" 1>/dev/null 2>/dev/null; then
+        l=$((${#files[@]}-1))
+        P=${files[$l]}
+        ! type "$P" 2>/dev/null 1>/dev/null && { echo 'ERROR: no valid command found!'; exit 1; }
+        unset 'files[$l]'
+        cmd=( "$P" ${cmd[@]} )
+    fi
+elif [[ "$P" =~ \( ]]; then
+    echo "(not parsing sub-script...)"
+elif ! type "$P" 1>/dev/null 2>/dev/null; then
+    echo "ERROR: not a valid command: ${P}!"
+    exit 1
+fi
+
+if [[ -z "$main" ]]; then
+    _job() {
+        wait-for-something --exit-with-error "$f" ${cmd[@]}
+    }
+else
+    if [[ "${cmd[@]}" =~ %f ]]; then
+        ARGS="${cmd[@]//%f/\"${main}\"}"
+    else
+        ARGS="${cmd[@]} \"$main\""
+    fi
+    _job() {
+        while true; do
+            inotifywait -e modify "$1" &>/dev/null
+            echo -n "-- $(date) - ${1} triggered compilation of ${main}..."
+            if ! eval ${ARGS} 1>/dev/null; then
+                echo
+                #echo "FAILED: $1"; return 1;
+                echo "FAILED: $1";
+            else
+                echo "DONE"
+            fi
+        done
+    }
+fi
+
+if [[ -n "$main" && ! -f "$main" ]]; then
+    :
+fi
+
+pids=""
+IFS=$'\n'
+for f in ${files[@]}; do
+    [[ "$f" == "$main" ]] && continue
+    echo "Start watcher for $f..."
+    _job "$f"&
+    pids+=" $!"
+done
+IFS=$oldIFS
+
+if [[ -n "$main" ]]; then
+    while true; do
+        inotifywait -e modify "$main" &>/dev/null
+        echo -n "-- $(date) - compiling ${main}..."
+        if ! eval ${ARGS} 1>/dev/null; then
+            echo
+            echo "FAILED: $main"
+            # exit 1
+        else
+            echo "DONE"
+        fi
+    done    
+else
+    ## just used to treat command not found errors
+    ## side-effect: if first file fails for any reason, will end the loop anyway...
+    for p in $pids; do
+        if ! wait $p; then
+            echo "Process $p fail"
+            #exit 1
+        fi
+    done
+fi
