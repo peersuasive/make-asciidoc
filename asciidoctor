@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
 me=$(readlink -f "$0")
-exe=$(which -a asciidoctor | grep -v "$me" | head -n1)
-
-[[ -z "$exe" ]] && echo "asciidoctor not found in PATH" && exit 1
-
+me2=$(which "$0")
+exe=$(which -a asciidoctor | grep -v "$me" | grep -v "$me2" | head -n1)
 ext=$HOME/.config/asciidoctor/extensions
 
 if ! [[ -d "$ext" ]]; then
@@ -25,5 +23,5 @@ else
     done
     set -- "${ARGS[@]}"
     #exec $exe "$@"
-    exec ruby2.3 $exe "$@"
+    exec ruby2.4 $exe "$@"
 fi
