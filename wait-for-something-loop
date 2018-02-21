@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 oldIFS=$IFS
-
+out_log=
+log_file=$out_log
+log() {
+    #local non; [[ "$1" == -n ]] && shift && non=1
+    #echo ${non:+ -n } "$@" >&1 #${out_log:-&1}
+    echo $@
+}
+err() {
+    #out_log=${out_log:-&2}
+    log "$@"
+    #out_log=$log_file
+}
 
 files=()
 _files=()
@@ -18,13 +29,14 @@ while (($#)); do
         _files+=( "$1" )
     else
         case "$1" in
-            -h|--help) echo "Usage: ${0##*/} <input...> [--] <cmd> [cmd arguments]"; exit 0;;
+            -h|--help) log "Usage: ${0##*/} <input...> [--] <cmd> [cmd arguments]"; exit 0;;
             --) EOA=1;;
             -m|--main)
-                ! [[ -f "$2" && -r "$2" ]] && echo "Can't open main file '$2'!" && exit 1
+                ! [[ -f "$2" && -r "$2" ]] && log "Can't open main file '$2'!" && exit 1
                 main="$2"; shift;;
             -x|--exclude) excl+=( "$2" ); shift;;
-            -*) echo "Unknown option: $1"; exec "$0" --help; exit 1;;
+            -l|--log) out_log="$2"; log_file="$2"; shift;;
+            -*) log "Unknown option: $1"; exec "$0" --help; exit 1;;
             *)
                 if [[ -f "$1" ]]; then _files+=( "$1" )
                 else cmd+=( "$1" ); fi
@@ -48,14 +60,14 @@ if !((EOA)); then
     if ! type "$P" 1>/dev/null 2>/dev/null; then
         l=$((${#files[@]}-1))
         P=${files[$l]}
-        ! type "$P" 2>/dev/null 1>/dev/null && { echo 'ERROR: no valid command found!'; exit 1; }
+        ! type "$P" 2>/dev/null 1>/dev/null && { err 'ERROR: no valid command found!'; exit 1; }
         unset 'files[$l]'
         cmd=( "$P" ${cmd[@]} )
     fi
 elif [[ "$P" =~ \( ]]; then
-    echo "(not parsing sub-script...)"
+    err "(not parsing sub-script...)"
 elif ! type "$P" 1>/dev/null 2>/dev/null; then
-    echo "ERROR: not a valid command: ${P}!"
+    err "ERROR: not a valid command: ${P}!"
     exit 1
 fi
 
@@ -72,13 +84,13 @@ else
     _job() {
         while true; do
             inotifywait -e modify "$1" &>/dev/null
-            echo -n "-- $(date) - ${1} triggered compilation of ${main}..."
+            log -n "-- $(date) - ${1} triggered compilation of ${main}..."
             if ! eval ${ARGS} 1>/dev/null; then
-                echo
-                #echo "FAILED: $1"; return 1;
-                echo "FAILED: $1";
+                err
+                #err "FAILED: $1"; return 1;
+                err "FAILED: $1";
             else
-                echo "DONE"
+                log "DONE"
             fi
         done
     }
@@ -92,7 +104,7 @@ pids=""
 IFS=$'\n'
 for f in ${files[@]}; do
     [[ "$f" == "$main" ]] && continue
-    echo "Start watcher for $f..."
+    log "Start watcher for $f..."
     _job "$f"&
     pids+=" $!"
 done
@@ -101,13 +113,13 @@ IFS=$oldIFS
 if [[ -n "$main" ]]; then
     while true; do
         inotifywait -e modify "$main" &>/dev/null
-        echo -n "-- $(date) - compiling ${main}..."
+        log -n "-- $(date) - compiling ${main}..."
         if ! eval ${ARGS} 1>/dev/null; then
-            echo
-            echo "FAILED: $main"
+            err
+            err "FAILED: $main"
             # exit 1
         else
-            echo "DONE"
+            log "DONE"
         fi
     done    
 else
@@ -115,7 +127,7 @@ else
     ## side-effect: if first file fails for any reason, will end the loop anyway...
     for p in $pids; do
         if ! wait $p; then
-            echo "Process $p fail"
+            err "Process $p fail"
             #exit 1
         fi
     done

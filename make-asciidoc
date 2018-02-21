@@ -24,6 +24,8 @@ Options:
     -E|--no-embedded-images don't embed images in html file
     -T|--force-toc          html only - force TOC
     -V|--document-version   set specific version for the document
+    -A|--auto               auto-compile doc (for linux only atm.)
+    -S|--stop-auto          stop auto-compilation of doc
     --level                 try to guess title at which the excerpt is starting
     --headers <file>        specify a header file to include
     --footers <file>        specify a footer file to include
@@ -56,6 +58,8 @@ output_file=
 embed_images=1
 output_format=
 force_toc=
+autocomp=
+stop_autocomp=
 formats=()
 EOO=0
 ARGS=()
@@ -67,7 +71,7 @@ add_format() {
     formats+=( "$1" )
 }
 while (($#)); do
-    s=0; ks=0
+    s=0; ks=0 # ks: when option takes an argument (ex.: -f pdf), keep second argument as well in OPTS
     OPTS+=( "$1" )
     if ((EOO)); then
         ARGS+=( "$1" )
@@ -89,6 +93,8 @@ while (($#)); do
         -E|--embed-images) unset embed_images;;
         -T|--force-toc) force_toc=1;;
         -V|--document-version) version="$2"; ks=1;;
+        -A|--auto) autocomp=1;;
+        -X|--stop-auto) stop_autocomp=1;;
         --headers) has_headers="$2"; ks=1;;
         --footers) has_footers="$2"; ks=1;;
         --common) has_common="$2"; ks=1;;
@@ -106,6 +112,9 @@ while (($#)); do
     ((ks)) && shift && OPTS+=( "$1" )
     shift
 done
+
+## idiotic options
+((autocomp)) && ((stop_autocomp)) && echo "Make up your mind: either auto-comp or stop-comp !" >&2 && exit 1
 
 output_format="${formats[0]}"
 output_format=${output_format:-$default_format}
@@ -169,6 +178,8 @@ find_file() {
     echo "${matches[@]}"
 }
 
+## find input file
+eval "input_file=\$$#"
 ## set output format specific options
 case $output_format in
     pdf)
@@ -186,7 +197,7 @@ case $output_format in
     docx|odt)
         config_dir=$HOME/.config/asciidoctor
         ARGS=( "$@" )
-        eval "input_file=\$$#"
+        #eval "input_file=\$$#"
         ofile=${input_file%.*}.${output_format}
         output_file=${output_file:-$ofile}
         mktmp; html="$tmpl"
@@ -209,7 +220,7 @@ case $output_format in
     *)
         config_dir=$HOME/.config/asciidoctor
         cmd=asciidoctor
-        eval "input_file=\$$#"
+        #eval "input_file=\$$#"
         ofile=${input_file%.*}.${output_format}
         output_file=${output_file:-$ofile}
 
@@ -304,7 +315,35 @@ echo "version: $version"
 echo "has notes: $has_notes"
 echo "output format: $output_format"
 echo "output file: $output_file"
+echo "watching processes: $(is_watching && echo $watching || echo NONE)"
 fi
+
+## auto-compilation routines
+watching=
+is_watching() {
+    [[ -z "$input_file" ]] && return 1
+    #watching=`pgrep -f "inotifywait -e modify.*${input_file##*/}$"`
+    #watching+=" $(\ps hoppid $watching)"
+    watching=`pgrep -d, -f "wait-for-something-loop -m.*${input_file##*/} "`
+    [[ -z "${watching}" ]] && return 1
+    watching=`pgrep -P$watching`
+    return 0
+}
+stop_watching() {
+    is_watching && kill -5 $watching
+    return 0
+}
+set_autocomp() {
+    stop_watching
+    local has_config has_sources
+    has_config=$(find_file -r ".*/.+[.]config$")
+    has_sources=$(find_file -r ".*/.+[.]adoc$")
+    exec wait-for-something-loop -m "$input_file" ${has_sources:+*.adoc} ${has_style:+*.yml} ${has_config:+*.config} ${has_css_style:+*.css} -- make-asciidoc -e $ENV "${ARGS[@]}"
+    exit 1
+}
+((stop_autocomp)) && stop_watching && exit 0
+
+
 
 ## compile excerpt
 if [[ -n "$with_template" ]]; then
@@ -507,4 +546,5 @@ done
 
 #((clean_input)) && [[ -n "$input_file" ]] && \rm -f "$input_file"
 \rm -f "$tmpl"
+((autocomp)) && set_autocomp
 exit $r
