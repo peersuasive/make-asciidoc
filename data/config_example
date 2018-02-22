@@ -1,0 +1,11 @@
+## config example for ~/.config/asciidoctor/config
+##
+
+# path to extensions, custom asciidoctor-pdf included
+exts=( "~/path/to/custom/asciidoctor-pdf" )
+
+# common files (lib) that can be included (mainly for common.adoc)
+common="~/.config/asciidoctor/common"
+
+# extensions that are required and always loaded
+required=( "asciidoctor-diagram" )

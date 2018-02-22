@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
 
-#exec asciidoctor -r /home/c82tber/src/vcs/asciidoctor-pdf/lib/asciidoctor-pdf.rb -b pdf "$@"
-#exec /home/c82tber/src/vcs/asciidoctor-pdf/bin/asciidoctor-pdf "$@"
+base=$(dirname "$(readlink -f "$0")")
+! [[ -f "$base/asciidoctor" ]] && "Configuration error: can't find asciidoctor library" && exit 1
 
-bin_root=/home/c82tber/src/vcs/text/asciidoctor/asciidoctor-pdf/
+__as_lib=1
+. "$base/asciidoctor"
+__as_lib=0
 
-exts=( "$HOME/.config/asciidoctor/extensions" "$HOME/.config/asciidoctor-pdf/extensions" )
+asciidoctor=
+config_dir="$HOME/.config/asciidoctor-pdf"
+config="$config_dir/config"
+! find_exe "asciidoctor-pdf" && echo "ERROR: asciidoctor-pdf found neither in config nor PATH." && exit 1
 
-ARGS=()
-while (($#)); do
-    case $1 in
-        -r|--require)
-            e=$2; shift
-            for ext in ${exts[@]}; do
-                lib=$(readlink -f "$ext/${e%.rb}.rb")
-                [[ -f "$lib" ]] && break
-            done
-            [[ ! -f "$lib" ]] && lib=$e
-            ARGS+=( "-r" "$lib" )
-            ;;
-        *) ARGS+=( "$1" );;
-    esac
-    shift
-done
+exts+=( "$HOME/$config_dir/extensions" )
+
+parse_args "$@"
 set -- "${ARGS[@]}"
-exec ruby2.3 "${bin_root%/}"/bin/asciidoctor-pdf "$@"
+
+((DEBUG>1)) && exec echo "$asciidoctor" "$@"
+exec "$asciidoctor" "$@"

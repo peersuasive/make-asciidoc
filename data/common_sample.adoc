@@ -1,0 +1,48 @@
+ifeval::[{env} == dev]
+:dev: 1
+endif::[]
+ifndef::version[]
+ifdef::dev[]
+v0.0, {localdatetime}: draft
+endif::dev[]
+ifndef::dev[]
+v0.9-RC1
+endif::dev[]
+endif::version[]
+:toc:
+ifndef::toc-title[]
+:toc-title: Contents
+endif::toc-title[]
+ifndef::doctype[]
+:doctype: article
+endif::doctype[]
+:experimental: true
+:source-highlighter: rouge
+:listing-caption: Listing
+:pdf-page-size: A4
+:pdf-stylesdir: .
+:pdf-style: local
+:icons: font
+:icon-set: fa
+:sectnums:
+:sectnumlevels: 2
+:lang: fr
+// :icon-set: octicon
+
+// disable section numbering
+:sectnums!:
+// disable prefix in table's caption
+:table-caption!:
+
+ifdef::dev[]
+:version: {revnumber}.{revremark}.{revdate}
+endif::dev[]
+
+// print version
+[.test-right]
+[.xsmall.gray]#_``{version}``_#
+
+// common (local) attributes /////////////////////
+ifdef::has_common[]
+include::{has_common}[]
+endif::has_common[]
