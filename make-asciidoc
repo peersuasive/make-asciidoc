@@ -354,7 +354,7 @@ fi
 if [[ -n "$with_template" ]]; then
     #mktmp; set -- "-o" "${with_template%.*}.pdf" "$tmpl"
     #ofile=${with_template%.*}.pdf
-    eval "input_file=\$$#"
+    [[ -z "$input_file" ]] && eval "input_file=\$$#"
     ofile=${input_file%.*}.${output_format}
     output_file=${output_file:-$ofile}
     mktmp; set -- "$tmpl"
@@ -414,7 +414,7 @@ endif::has_common[]
 EOT
     echo >> "$tmpl"
     if ((adjust_level)); then
-        if lev=$(grep -ohm1 '^\([=]\+\)\ ' $with_template); then
+        if lev=$(grep -ohm1 '^\([=]\+\)\ ' $input_file); then
             lev=$(( ${#lev} -1 -1)); ((lev<0)) && lev=0
             imax=1
             while ((lev)); do
@@ -427,7 +427,7 @@ EOT
             done
         fi
     fi
-    echo "include::${with_template}[]" >> "$tmpl"
+    echo "include::${input_file}[]" >> "$tmpl"
 fi
 
 ## compile
