@@ -3,6 +3,7 @@ set -o pipefail
 
 default_format=pdf
 with_hyphen=1
+verbose=
 DEBUG=0
 ECHO=
 _c_v() {
@@ -26,6 +27,7 @@ Options:
     -V|--document-version   set specific version for the document
     -A|--auto               auto-compile doc (for linux only atm.)
     -S|--stop-auto          stop auto-compilation of doc
+    -v|--verbose            be vebose (print WARNINGS, etc.)
     --level                 try to guess title at which the excerpt is starting
     --headers <file>        specify a header file to include
     --footers <file>        specify a footer file to include
@@ -95,6 +97,7 @@ while (($#)); do
         -V|--document-version) version="$2"; ks=1;;
         -A|--auto) autocomp=1;;
         -X|--stop-auto) stop_autocomp=1;;
+        -v|--verbose) verbose=1;;
         --headers) has_headers="$2"; ks=1;;
         --footers) has_footers="$2"; ks=1;;
         --common) has_common="$2"; ks=1;;
@@ -447,7 +450,7 @@ r=$?
     }
 }
 ((r)) && [[ -z "$log" ]] && r=0
-((r)) && echo "$log"
+((r || verbose)) && echo "$log"
 
 
 ## post treatments
