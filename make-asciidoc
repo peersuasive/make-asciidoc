@@ -38,6 +38,11 @@ Special files:
     --lexicon <file>        specify a lexicon file to include
     --appendix <file>       specify an appendix file to include
     --notes <file>          specify a notes file to include (only visible in dev env)
+
+With template:
+    --level                 try to guess title at which the excerpt is starting
+	-C|--set-chapter-number	set chapter number
+
     --debug                 print debug traces
     --debug2                print (more) debug traces
 EOH
@@ -59,6 +64,7 @@ has_lexicon=
 has_appendix=
 has_notes=
 has_style=
+chapter_number=
 output_file=
 embed_images=1
 output_format=
@@ -87,6 +93,7 @@ while (($#)); do
         --) EOO=1;;
         -h|--help) _help; exit 0;;
         --level) adjust_level=1;;
+		-C|--set-chapter-number) chapter_number="$2"; ks=1;;
         -e|--env) ENV=$2; ks=1;;
         -t|--template) with_template=1;;
         -s|--style) has_style="$2"; ks=1;;
@@ -407,8 +414,14 @@ endif::has_css_style[]
 :icon-set: fa
 :sectnums:
 :sectnumlevels: 2
+EOT
+    if ((chapter_number)); then
+        echo ":sectnumoffset: ${chapter_number}" >> "$tmpl"
+    else
+        echo ':sectnums!:' >> "$tmpl"
+    fi
+    cat <<'EOT' >> "$tmpl"
 :lang: fr
-:sectnums!:
 
 ifdef::dev[]
 :version: {revnumber}.{revremark}.{revdate}
@@ -433,6 +446,7 @@ endif::common[]
 endif::has_local[]
 EOT
     echo >> "$tmpl"
+    ((chapter_number)) && echo ':sectnums:' >> "$tmpl"
     if ((adjust_level)); then
         if lev=$(grep -ohm1 '^\([=]\+\)\ ' $input_file); then
             lev=$(( ${#lev} -1 -1)); ((lev<0)) && lev=0
