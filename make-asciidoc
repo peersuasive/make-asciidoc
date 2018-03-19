@@ -334,7 +334,7 @@ set_autocomp() {
 }
 
 if ((DEBUG)); then
-ECHO="echo would run:"
+    ((DEBUG<2)) && ECHO="echo would run:"
 echo "ENV: $ENV"
 echo "local: $has_local"
 echo "common: $has_common"
@@ -462,8 +462,7 @@ r=$?
         echo "DBG: $@" >&2
     }
     echo $log
-    echo "(aborting due to DEBUG mode)"
-    exit 0
+    ((DEBUG<2)) && echo "(aborting due to DEBUG mode)" && exit 0
 } || {
     dbg() {
         :
@@ -569,6 +568,6 @@ for ((i=0;i<m;++i)); do
 done
 
 #((clean_input)) && [[ -n "$input_file" ]] && \rm -f "$input_file"
-\rm -f "$tmpl"
+((DEBUG<2)) && \rm -f "$tmpl" || echo "DEBUG: tmpl: $tmpl"
 ((autocomp)) && set_autocomp
 exit $r
