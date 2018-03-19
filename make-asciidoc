@@ -28,9 +28,11 @@ Options:
     -A|--auto               auto-compile doc (for linux only atm.)
     -S|--stop-auto          stop auto-compilation of doc
     -v|--verbose            be vebose (print WARNINGS, etc.)
-    --level                 try to guess title at which the excerpt is starting
+
+Special files:
     --headers <file>        specify a header file to include
     --footers <file>        specify a footer file to include
+    --local <file>         	specify a local file to include
     --common <file>         specify a common file to include
     --biblio <file>         specify a biblio file to include
     --lexicon <file>        specify a lexicon file to include
@@ -52,6 +54,7 @@ adjust_level=0
 with_template=
 has_biblio=
 has_common=
+has_local=
 has_lexicon=
 has_appendix=
 has_notes=
@@ -101,6 +104,7 @@ while (($#)); do
         --headers) has_headers="$2"; ks=1;;
         --footers) has_footers="$2"; ks=1;;
         --common) has_common="$2"; ks=1;;
+        --local) has_local="$2"; ks=1;;
         --biblio) has_biblio="$2"; ks=1;;
         --lexicon) has_lexicon="$2"; ks=1;;
         --appendix) has_appendix="$2"; ks=1;;
@@ -245,6 +249,9 @@ esac
 ## look for commonly included files
 # common
 #commons=$(find . -maxdepth 1 -type f -regextype sed -regex ".*/[0-9]*[.]*[Cc][Oo][Mm][Mm][Oo][Nn][^.]*\.adoc" -not -size 0)
+if [[ -z "$has_local" ]]; then
+    has_local=$(find_file "[Ll][Oo][Cc][Aa][Ll]" local)
+fi
 if [[ -z "$has_common" ]]; then
     has_common=$(find_file "[Cc][Oo][Mm][Mm][UuOo][Nn]" common)
 fi
@@ -329,6 +336,7 @@ set_autocomp() {
 if ((DEBUG)); then
 ECHO="echo would run:"
 echo "ENV: $ENV"
+echo "local: $has_local"
 echo "common: $has_common"
 echo "lexicon: $has_lexicon"
 echo "biblio: $has_biblio"
@@ -358,6 +366,7 @@ if [[ -n "$with_template" ]]; then
     ofile=${input_file%.*}.${output_format}
     output_file=${output_file:-$ofile}
     mktmp; set -- "$tmpl"
+
     cat <<'EOT' >> "$tmpl"
 :notitle:
 ifeval::[{env} == "dev"]
@@ -408,9 +417,20 @@ endif::dev[]
 [.test-right]
 [.xsmall.gray]#_``{version}``_#
 
+ifdef::has_local[]
+include::{has_local}[]
+endif::has_local[]
+
+ifndef::has_local[]
+ifdef::common[]
+include::{common}/common.adoc[]
+endif::common[]
+ifndef::common[]
 ifdef::has_common[]
 include::{has_common}[]
 endif::has_common[]
+endif::common[]
+endif::has_local[]
 EOT
     echo >> "$tmpl"
     if ((adjust_level)); then
@@ -434,7 +454,7 @@ fi
 log=$($ECHO ${cmd} \
     -r asciidoctor-diagram ${ENV:+-a env=$ENV@} ${styles_dir:+-a pdf-stylesdir="${styles_dir}@"} ${fonts_dir:+-a pdf-fontsdir="${fonts_dir}@"} \
         -a version="${version}"@ ${with_template:+ -q} \
-        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} ${no_toc:+-a no_toc} \
+        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_local:+-a has_local="$has_local"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} ${no_toc:+-a no_toc} \
         -b ${output_format} ${output_file:+-o "$output_file"} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already|constant)')
 r=$?
 ((DEBUG)) && {
@@ -451,7 +471,6 @@ r=$?
 }
 ((r)) && [[ -z "$log" ]] && r=0
 ((r || verbose)) && echo "$log"
-
 
 ## post treatments
 # page break to horizontal rule
