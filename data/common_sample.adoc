@@ -1,6 +1,8 @@
-ifeval::[{env} == dev]
+// env
+ifeval::[{env} == "dev"]
 :dev: 1
 endif::[]
+// version
 ifndef::version[]
 ifdef::dev[]
 v0.0, {localdatetime}: draft
@@ -9,40 +11,66 @@ ifndef::dev[]
 v0.9-RC1
 endif::dev[]
 endif::version[]
-:toc:
+// toc
+ifndef::no_toc[]
+ifndef::notoc[]
+:toc: auto
 ifndef::toc-title[]
-:toc-title: Contents
+:toc-title: Sommaire
 endif::toc-title[]
+endif::notoc[]
+endif::no_toc[]
+// document type
 ifndef::doctype[]
-:doctype: article
+//:doctype: article
 endif::doctype[]
 :experimental: true
 :source-highlighter: rouge
 :listing-caption: Listing
 :pdf-page-size: A4
-:pdf-stylesdir: .
-:pdf-style: local
+ifdef::has_style[]
+:pdf-stylesdir: {styles_dir}
+:pdf-style: {has_style}
+endif::has_style[]
+ifndef::has_style[]
+:pdf-style: my
+endif::has_style[]
+ifdef::has_css_style[]
+:stylesdir: {css_styles_dir}
+:stylesheet: {has_css_style}
+endif::has_css_style[]
+ifndef::has_css_style[]
+:stylesheet: my-theme.css
+endif::has_css_style[]
 :icons: font
 :icon-set: fa
 :sectnums:
 :sectnumlevels: 2
+ifndef::lang[]
 :lang: fr
+endif::lang[]
+
 // :icon-set: octicon
 
-// disable section numbering
 :sectnums!:
-// disable prefix in table's caption
-:table-caption!:
 
+ifndef::nover[]
 ifdef::dev[]
 :version: {revnumber}.{revremark}.{revdate}
 endif::dev[]
 
-// print version
 [.test-right]
 [.xsmall.gray]#_``{version}``_#
+endif::nover[]
 
-// common (local) attributes /////////////////////
+
+// common attributes /////////////////////
 ifdef::has_common[]
 include::{has_common}[]
 endif::has_common[]
+
+:sectnums!:
+:table-caption!:
+
+:fn: 0
+:rfn: 0
