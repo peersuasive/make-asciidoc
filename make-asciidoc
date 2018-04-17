@@ -2,6 +2,7 @@
 set -o pipefail
 
 default_format=pdf
+available_formats=( pdf doc docx odt html-notoc html-jive html )
 with_hyphen=1
 verbose=
 DEBUG=0
@@ -19,6 +20,7 @@ Options:
     -t|--template <file>    render only the specified file
     -s|--style <file>       use the provided style file
     -f|--format <format>    output format (default: $default_format)
+        available formats: ${available_formats[@]}
     -H|--with-hyphenation   enable hyphenation (default: $(_c_v $with_hyphen))
     -Z|--no-hyphenation     disable hyphenation
     -o|--out <name>         output file
@@ -43,6 +45,7 @@ With template:
     --level                 try to guess title at which the excerpt is starting
 	-C|--set-chapter-number	set chapter number
 
+Development:
     --debug                 print debug traces
     --debug2                print (more) debug traces
 EOH
@@ -132,6 +135,8 @@ done
 
 output_format="${formats[0]}"
 output_format=${output_format:-$default_format}
+! [[ " ${available_formats[@]} " =~ \ ${output_format}\  ]] \
+    && echo "Unknown outout format: ${output_format}" && _help && exit 1
 set -- "${ARGS[@]}"
 
 ## multiple formats at once
@@ -582,6 +587,6 @@ for ((i=0;i<m;++i)); do
 done
 
 #((clean_input)) && [[ -n "$input_file" ]] && \rm -f "$input_file"
-((DEBUG<2)) && \rm -f "$tmpl" || echo "DEBUG: tmpl: $tmpl"
+!((DEBUG)) && \rm -f "$tmpl" || echo "DEBUG: tmpl: $tmpl"
 ((autocomp)) && set_autocomp
 exit $r
