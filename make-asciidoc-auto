@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+! [[ -f "$1" ]] && echo "Missing main file" && exit 1
+main="$1"; shift
+ext="${main##*.}"
+
+_find_ext() {
+    [[ -z "$1" ]] && return 1; ext=$1; dir=$2
+    [[ -n "$dir" && ! -d "$dir" ]] && return 1
+    [[ -z `find ${dir:-.} -maxdepth 1 -type f -name "*.$ext"|head -n 1` ]] && return 1
+    echo 1
+}
+
+csv=$(_find_ext csv)
+yml=$(_find_ext yml)
+assets=$(_find_ext png assets)
+diagrams=$(_find_ext png diagrams)
+
+wait-for-something-loop -m "$main" *.$ext \
+    ${csv:+*.csv} \
+    ${yml:+*.yml} \
+    ${assets:+assets/*.png} \
+    ${diagrams:+diagrams/*.png} \
+    -- make-asciidoc -e ${ENV:-dev} ${@:-f pdf} "%f"
