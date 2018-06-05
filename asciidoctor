@@ -17,7 +17,21 @@ asciidoctor=
 config_dir="$HOME/.config/asciidoctor"
 config="$config_dir/config"
 exts=( "$config_dir/extensions" )
+
 [[ -d "$config_dir/common" ]] && common="$config_dir/common"
+
+declare -A commons
+get_common_libs() {
+    if [[ -d "$common" ]]; then
+        for f in "$common"/*.adoc; do
+            if [[ -r "$f" ]]; then
+                n=${f##*/}; n=${n%.adoc}; n=has_common_${n// /_}
+                _dbg "adding common lib: $n ($f)" >&2
+                commons["$n"]="$f"
+            fi
+        done
+    fi
+}
 required=()
 
 load_config() {
@@ -130,9 +144,15 @@ parse_args() {
     for a in "${OPTS[@]}"; do
         ARGS+=( "$a" )
     done
-}
 
-[[ -n "$common" ]] && ARGS+=( "-a" "common=${common}@" )
+    if [[ -n "$common" && -d "$common" ]]; then
+        ARGS+=( "-a" "common=${common}@" )
+        get_common_libs
+        for k in ${!commons[@]}; do
+            ARGS+=( "-a" "$k=${commons["$k"]}@" )
+        done
+    fi
+}
 
 ((__as_lib)) && return
 
