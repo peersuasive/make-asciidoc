@@ -435,7 +435,7 @@ endif::has_css_style[]
 :icons: font
 :icon-set: fa
 :sectnums:
-:sectnumlevels: 2
+:sectnumlevels: 3
 EOT
     if ((chapter_number)); then
         echo ":sectnumoffset: ${chapter_number}" >> "$tmpl"
