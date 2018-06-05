@@ -48,6 +48,7 @@ With template:
 Development:
     --debug                 print debug traces
     --debug2                print (more) debug traces
+    --debug3                print (even more) debug traces
 EOH
 }
 
@@ -130,6 +131,16 @@ while (($#)); do
     shift
 done
 
+((DEBUG)) && {
+    dbg() {
+        echo "DBG: $@" >&2
+    }
+} || {
+    dbg() {
+        :
+    }
+}
+
 ## idiotic options
 ((autocomp)) && ((stop_autocomp)) && echo "Make up your mind: either auto-comp or stop-comp !" >&2 && exit 1
 
@@ -158,7 +169,7 @@ if ((mformat>1)); then
     exit $failed
 fi
 
-((DEBUG>1)) && set -x
+((DEBUG>2)) && set -x
 
 #version=${version:-v0.0.draft.$(date +"%d-%m-%Y.%H:%M:%S.%Z")};;
 ENV=${ENV:-prod}
@@ -286,7 +297,9 @@ if [[ -z "$has_footers" ]]; then
     has_footers=$(find_file "[Ff][Oo][Oo][Tt][Ee][Rr][Ss]" footers)
 fi
 if [[ -z "$has_style" ]]; then
+    dbg "no pre-defined style"
     has_style=$(find_file -r ".*/.+[-]theme[.]yml$" style)
+    dbg "found something ? '$has_style'"
     if [[ -n "$has_style" ]]; then
         has_style=${has_style##*/}
         has_style=${has_style%-*}
@@ -296,6 +309,7 @@ if [[ -z "$has_style" ]]; then
             styles_dir="$config_dir/themes"
         fi
     fi
+    dbg "set styles_dir to '$styles_dir'"
 else
     styles_dir=$(readlink -f `dirname "${has_style}"`)
     has_style=${has_style##*/}; has_style=${has_style%-}
@@ -346,7 +360,7 @@ set_autocomp() {
 }
 
 if ((DEBUG)); then
-    ((DEBUG<2)) && ECHO="echo would run:"
+    ((DEBUG<3)) && ECHO="echo would run:"
 echo "ENV: $ENV"
 echo "local: $has_local"
 echo "common: $has_common"
@@ -469,26 +483,35 @@ EOT
     echo "include::${input_file}[]" >> "$tmpl"
 fi
 
+log=
 ## compile
-log=$($ECHO ${cmd} \
-    -r asciidoctor-diagram ${ENV:+-a env=$ENV@} ${styles_dir:+-a pdf-stylesdir="${styles_dir}@"} ${fonts_dir:+-a pdf-fontsdir="${fonts_dir}@"} \
-        -a version="${version}"@ ${with_template:+ -q} \
-        ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_local:+-a has_local="$has_local"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} ${no_toc:+-a no_toc} \
-        -b ${output_format} ${output_file:+-o "$output_file"} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already|constant)')
-r=$?
+compile() {
+    log=$($ECHO ${cmd} \
+        -r asciidoctor-diagram ${ENV:+-a env=$ENV@} ${styles_dir:+-a pdf-stylesdir="${styles_dir}@"} ${fonts_dir:+-a pdf-fontsdir="${fonts_dir}@"} \
+            -a version="${version}"@ ${with_template:+ -q} \
+            ${has_biblio:+-a has_biblio="$has_biblio"} ${has_appendix:+-a has_appendix="$has_appendix"} ${has_notes:+-a has_notes="$has_notes"} ${has_local:+-a has_local="$has_local"} ${has_common:+-a has_common="$has_common"} ${has_lexicon:+-a has_lexicon="$has_lexicon"} ${has_headers:+-a has_headers="$has_headers"} ${has_footers:+-a has_footers="$has_footers"} ${has_style:+-a has_style="$has_style"} ${has_style:+-a pdf-style="$has_style"@} ${styles_dir:+-a styles_dir="$styles_dir"} ${has_css_style:+-a has_css_style="$has_css_style"} ${has_glossary:+-a has_glossary="$has_glossary"} ${css_styles_dir:+-a css_styles_dir="$css_styles_dir"} ${with_hyphen:+-r hyphenation} ${embed_images:+-a data-uri} ${no_toc:+-a no_toc} \
+            -b ${output_format} ${output_file:+-o "$output_file"} "$@" 2>&1 | grep -E -v '[0-9]: warning: (previous|already|constant)')
+    r=$?
+    return $r
+}
+compile "$@"
 ((DEBUG)) && {
     dbg() {
         echo "DBG: $@" >&2
     }
-    echo $log
+    echo "$log"
     ((DEBUG<2)) && echo "(aborting due to DEBUG mode)" && exit 0
+    ECHO=
+    export DEBUG
+    echo "-------------------------------------------"
+    compile "$@"
 } || {
     dbg() {
         :
     }
 }
 ((r)) && [[ -z "$log" ]] && r=0
-((r || verbose)) && echo "$log"
+((r || verbose || DEBUG)) && echo "$log"
 
 ## post treatments
 # page break to horizontal rule
