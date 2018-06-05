@@ -20,4 +20,4 @@ wait-for-something-loop -m "$main" *.$ext \
     ${yml:+*.yml} \
     ${assets:+assets/*.png} \
     ${diagrams:+diagrams/*.png} \
-    -- make-asciidoc -e ${ENV:-dev} ${@:-f pdf} "%f"
+    -- make-asciidoc -e ${ENV:-dev} ${@:--f pdf} "%f"
