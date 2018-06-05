@@ -296,6 +296,9 @@ fi
 if [[ -z "$has_footers" ]]; then
     has_footers=$(find_file "[Ff][Oo][Oo][Tt][Ee][Rr][Ss]" footers)
 fi
+if [[ -z "$has_glossary" ]]; then
+    has_glossary=$(find_file "[Gg][Ll][Oo][Ss][Ss][Aa][Ii]*[Rr][eEyY]" glossary)
+fi
 if [[ -z "$has_style" ]]; then
     dbg "no pre-defined style"
     has_style=$(find_file -r ".*/.+[-]theme[.]yml$" style)
